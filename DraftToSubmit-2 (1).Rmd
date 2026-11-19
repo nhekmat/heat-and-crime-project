@@ -1,0 +1,270 @@
+---
+title: "Do higher temperatures have an impact on crime?"
+output:
+  html_document: default
+  pdf_document:
+    latex_engine: xelatex
+date: "2023-11-29"
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## R Markdown
+## Introduction
+> The city of Chicago is the third most populated city in the United States and according to the Urban Crime Lab, a nonprofit organization dedicated to reducing gun violence, the city had a homicide rate of 29.6 homicides per 100,000 residents in 2021 compared to the 7.8 per 100,000 national average ^[“FastStats - Homicide.” Centers for Disease Control and Prevention, Centers for Disease Control and Prevention, 14 Sept. 2023, www.cdc.gov/nchs/fastats/homicide.htm. ] ^[Combating Gun Trafficking and Reducing Violence in Chicago. 117th Cong. (2021). https://www.judiciary.senate.gov/imo/media/doc/Ander%20testimony.pdf]. In response to these alarming statistics, this report examines a complex question: "Do higher temperatures have an impact on crime?" By drawing on data from Chicago weather and crime databases, we hypothesize that the yearly third quarter maximum temperatures (June through September) have a higher proportion of homicides compared to the first quarter maximum temperatures (January through March).
+
+## Background
+
+> As previously stated, the city of the city of Chicago's trends in crime can be caused from both political and sociological factors, although there may be an explanation for this through a psychological factor - the temperature-aggression hypothesis^[Anderson, C. A. (2001). Heat and violence. Current directions in psychological science, 10(1), 33-38.]. This hypothesis, supported by theories like the negative affect escape, simple negative affect, excitation transfer/misattribution, cognitive neoassociation, and physiological-thermoregulator, suggests that higher temperatures might amplify aggressive behaviors. This is particularly pertinent in the context of Chicago's varying climate. The negative affect escape model, for instance, posits that increased aggression can be a result of excessive heat, especially when individuals experience low to moderate negative affect – known as the 'fight' response. Conversely, excessive heat might decrease aggression under high negative affect, the 'flight' response ^[Anderson, C. A. (1989). Temperature and aggression: ubiquitous effects of heat on occurrence of human violence. Psychological bulletin, 106(1), 74.]. This report operates under the assumption that crimes in our dataset predominantly occur under conditions of low to moderate negative affect, potentially aligning with temperature variations.
+
+>The data set titled "Chicago Crime" was sourced from the Data.gov database. Collected by the city of chicago in partnership with the Chicago Police Department from 1997 to 2023, this dataset focuses on crime involving bodily harm or threat of bodily harm. The key variables of this data set include "time_period," "period_start," "period_end," "crime_type," and "num_victims." The time_period column categorizes each crime event into a Quarter of the year (Q1, Q2, Q3, Q4). A single row of this data set represents one crime committed within a certain quarter. If the data is thought of as a sample from a larger population, the larger population would include total crime incidents in urban areas during the time period. The total population would include all types of crime within each quarter as well.  Unusual factors within the crime data set that may affect the interpretation of results may be unreported crime which is neglected from the existing data set.
+
+> In our "Chicago Crime" dataset, the variable "crime_type" classifies each recorded incident into specific categories such as Assault, Battery, Criminal Sexual Assault, Homicide, Human Trafficking, Non-Fatal Shootings, and Robbery, providing us with a detailed breakdown of crime patterns in Chicago. The "period_start" and "period_end" variables denote the beginning and end dates of the period in which each crime occurred, enabling us to align crime incidents with specific time frames. In our analysis, we will use "crime_type" to examine if certain categories of crime are more prevalent or show significant variations during periods with different temperature profiles, especially comparing warmer and colder months. Simultaneously, "period_start" and "period_end" will help in correlating these crime incidents with corresponding temperature data from the "chicagotemp" dataset. This approach will allow us to explore the  dynamics of crime in relation to temperature fluctuations, thereby providing insights into whether and how environmental factors like temperature might influence crime trends in the city.
+
+>Additionally, the second data set is stored in the data frame chicagotemp. This data was collected by the National Centers for Environmental Information - National Oceanic and Atmospheric Administration. The data was collected at the weather tracking station at Chicago Midway Airport, IL from May 1, 1997 to May 1, 2023. The variables of this data set include "Date," tmax," "tmin." is the date of temp recorded, and "tmax" represents maximum temp. A single row of data represents one day of max and min temperatures. If the data is thought of as a sample from a larger population, the larger population would include all of the daily min and max temperatures in the Chicago area from the 1997 to the present. Unusual factors within the data set that may affect the interpretation of results include: possible outliers–extremely high or low records, missing NA values which have been removed.
+
+> By using statistical inference techniques, this report hopes to explore the possible correlation between the incidence of crime and quarter maximum temperatures within the city of Chicago. The major steps of this report include: data exploration, data cleaning, calculating population proportions for each quarter, statistical testing to compare population proportions, data visualization, and analysis of findings.
+
+> Additionally, the second dataset, titled "chicagotemp," was obtained from the National Centers for Environmental Information (NCEI), part of the National Oceanic and Atmospheric Administration (NOAA). This dataset encompasses temperature readings from Chicago Midway Airport, IL, spanning from May 1, 1997, to May 1, 2023. It includes variables such as the recorded date ("Date"), maximum temperature ("tmax"), and minimum temperature ("tmin"). Each row in this dataset represents temperature data for a single day. While this dataset offers a comprehensive view of temperature variations over the years, it is important to note potential limitations such as outliers—extreme temperature records—and the exclusion of missing values (NA), which have been removed for data consistency.
+
+### Analysis
+```{r, include=FALSE}
+# Import Revelavent Libraries
+library(tidyverse)
+library(lubridate)
+```
+
+```{r, include=FALSE}
+## Import Chicago Weather Data Set
+chicago_weather = read.csv("../data/midwaytempdata.csv", skip=1)
+# Display first 5 rows of original data
+head(chicago_weather, n=5)
+```
+
+
+```{r, include=FALSE}
+## Cleaning/Renaming/Categorizing Variables within the Chicago weather Data Set
+chicago_weather = chicago_weather %>%
+  rename(tavg = "TAVG..Degrees.Fahrenheit.", #average temperature in fahrenhiet
+         tmax = "TMAX..Degrees.Fahrenheit.", #maximum temperature
+         tmin = "TMIN..Degrees.Fahrenheit.", #minimum temperature
+         prcp = "PRCP..Inches.", #precipitation in inches
+         snow = "SNOW..Inches.", #snowfall in inches
+         snwd = "SNWD..Inches.") %>%  #snow depth in inches
+  mutate(date = ymd(Date)) %>%
+  mutate(year = year(Date)) %>%
+  mutate(month = month(Date)) %>%
+  select(date, tmax, tmin, month, year) %>%
+  mutate(quarter = case_when(
+    (month >= 01) & (month <= 03) ~ "Q1",
+    (month >= 04) & (month <= 06) ~ "Q2",
+    (month >= 07) & (month <= 09) ~ "Q3",
+    (month >= 10) & (month <= 12) ~ "Q4")) %>%
+  filter(year >= 2002, year < 2012)
+```
+
+```{r, include=FALSE}
+# summarize avg temp for each quarter for each year
+max_avg_temps = chicago_weather %>%
+  filter(!is.na(tmax)) %>%
+  group_by(quarter) %>%
+  summarize(avg_temp = mean(tmax)) %>%
+  filter(!is.na(avg_temp))
+```
+
+```{r, echo=FALSE}
+#graph to visualize average temperatures plotting
+ggplot(max_avg_temps, aes(x = quarter, y = avg_temp)) +
+  geom_col() +
+  labs(title = "Quarterly Average Temperatures from 2002 to 2012", x = "Quarter", y = "Average Temp (fahrenheit)")
+```
+
+> The graph is observes each quarter Q1: Months January and February, Q2: Months March, April, May, and June, Q3: Months July, August, and September Q4: Months October November, and December. This bar graph displays the Average Maximum Temperature from each quarter from the years 2002 to 2012. Q1 has the lowest average maximum temperature, followed by Q4, then Q2 and lastly Q3 has then highest average maximum temperature. 
+
+
+
+```{r, include=FALSE}
+## Import Chicago Crime Data Set
+chicago_violence = read.csv("../data/Violence_Reduction_-_Victim_Demographics_-_Aggregated.csv")
+```
+
+
+```{r, include=FALSE}
+
+## Cleaning/Renaming/Categorizing Variables within the Chicago weather Data Set
+## Cleaning/Renaming/Categorizing Variables within the Chicago weather Data Set
+
+chicago_violence = chicago_violence %>%
+  rename(time_period = "TIME_PERIOD", #Quarter Category
+         period_start = "TIME_PERIOD_START", #start date of the period
+         period_end = "TIME_PERIOD_END", # End date of the period
+         crime_type = "PRIMARY_TYPE", # primary type of the crime
+       num_victims = "NUMBER_OF_VICTIMS") %>% # number of victims involved
+  select(time_period, period_start, period_end, crime_type, num_victims) %>%
+    filter(!is.na(time_period) & !is.na(period_start) & !is.na(period_end) & !is.na(crime_type) & !is.na(num_victims))
+```
+
+```{r, include=FALSE}
+
+chicago_violence = chicago_violence %>%
+  #mutate(crime_type = case_when(
+   # crime_type == "HOMICIDE" ~ "homicide",
+   # crime_type != "HOMICIDE" ~ "other_crime"
+   #)) %>%
+  mutate(date = mdy(period_start)) %>%
+  filter(!is.na(date)) %>%
+  mutate(year = year(date),
+         month = month(date)) %>%
+  mutate(quarter = case_when(
+    (month == 01) ~ "Q1",
+    (month == 03) ~ "Q2",
+    (month == 07) ~ "Q3",
+    (month == 10) ~ "Q4",
+  )) %>%
+  filter(year >= 2002, year < 2012) %>%
+  select(quarter, year, crime_type, num_victims)
+```
+
+```{r, include=FALSE}
+### Data Exploration
+
+# Display Summaries of each dataframe
+summary(chicago_weather)
+summary(chicago_violence)
+```
+
+```{r, echo=FALSE}
+
+# Bar plot of crime types
+ggplot(chicago_violence, aes(x = crime_type)) +
+  geom_bar() +
+  labs(title = "Distribution of Crime Types", x = "Quarter", y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+> This bar graph explores the crime types included within the Chicago Crimes Data set. From the year 2002 to 2012, the graph shows the total count of crime by crime type. They crime types that were tracked include Assault, Battery, Criminal Sexual Assault, Homicide, Human Trafficking, Non-Fatal, and Robbery. Battery, Assult and Robbery are the top 3 contributors to the count. This graph is related to our research question as understanding the distribution of different types of crime provides context for the rest of your analysis. It also helps in interpreting results from other parts of the study, such as the correlation between temperature and overall crime rates.
+
+```{r, echo=FALSE}
+
+quarterly_crime_summary = chicago_violence %>%
+  group_by(quarter) %>%
+  summarize(crime_count = n()/10)
+ggplot(quarterly_crime_summary, aes(x = quarter, y = crime_count)) +
+  geom_col() +
+  labs(title = "Number of Crimes per quarter", x = "Crime Type", y = "Crime Count")
+```
+
+>  This graph displays average crimes counts per quarter. This data was collected from the years 2002 to 2012. Q1 has the lowest number of crimes followed by Q4, then Q2, and lastly Q3 has the highest number of total crimes.
+
+
+
+```{r, include=FALSE}
+
+# Join crime and weather data sets based on year and quarter
+# summarize avg temp for each quarter for each year
+max_avg_temps = chicago_weather %>%
+  group_by(year, quarter) %>%
+  summarize(avg_temp = mean(tmax), .groups="drop") %>%
+  filter(!is.na(avg_temp))
+merged_data <- left_join(chicago_violence, max_avg_temps, by = c("year", "quarter"))
+```
+
+
+
+### Correlation
+```{r, include=FALSE}
+
+merged_data_counts = merged_data %>%
+  group_by(quarter, year, avg_temp) %>%
+  summarize(crime_count = n(), .groups="drop") %>%
+  filter(!is.na(avg_temp))
+
+mergy = merged_data_counts %>% 
+  select(avg_temp, crime_count)
+
+merged_sum = mergy %>% 
+  summarize(mean_avg_temp = mean(avg_temp),
+            mean_crime_counts = mean(crime_count),
+            sd_crime_count = sd(crime_count),
+            sd_avg_temp = sd(avg_temp),
+            n = n(),
+            r = cor(avg_temp, crime_count)) %>% 
+  relocate(n)
+```
+
+
+```{r, echo=FALSE}
+ggplot(mergy, aes(x = avg_temp, y = crime_count)) +
+  geom_point() +
+  xlab("Average Maximum Temperature") +
+  ylab("Number of Crimes per Quarter") +
+  ggtitle("Temperature and Crime") +
+  geom_smooth(se = FALSE, method = "lm", formula = y ~ x) +
+  theme_bw() +
+  theme(text = element_text(size = 20)) 
+```
+
+> The regression line here describes how a response variable Crime changes as an explanatory variable Temperature changes from 2002 to 2012. 
+
+### Inference for linear models 
+
+### Hypothesis testing
+> H0:θ=0
+> Ha:θ≠0
+
+```{r, include=FALSE}
+
+# Assuming you have a data frame named merged_data with columns avg_temp and crime_count
+# Fit a linear regression model
+lm_model = lm(crime_count ~ avg_temp, merged_data_counts)
+
+# Display the summary of the linear regression
+summary(lm_model)
+
+# Obtain the estimated slope (theta_hat), its standard error, and perform the hypothesis test
+theta_hat = coef(lm_model)[2]
+se_theta_hat = summary(lm_model)$coefficients[2, "Std. Error"]
+
+# Calculate the t-statistic
+t_stat = theta_hat / se_theta_hat
+
+# Compute the p-value
+p_value = 2 * pt(abs(t_stat), df = nrow(merged_data_counts) - 2, lower.tail = FALSE)
+
+```
+
+```{r, echo=FALSE}
+
+# Display results
+cat("Estimated Slope (theta_hat):", theta_hat, "\n")
+cat("Standard Error of theta_hat:", se_theta_hat, "\n")
+cat("t-statistic:", t_stat, "\n")
+cat("p-value:", p_value, "\n")
+
+# Check if the p-value is less than the significance level (e.g., 0.05)
+if (p_value < 0.05) {
+  cat("Reject the null hypothesis. There is evidence to suggest that the slope is significantly different from 0.\n")
+} else {
+  cat("Fail to reject the null hypothesis. There is not enough evidence to suggest a significant difference from 0.\n")
+}
+
+```
+
+
+### Discussion 
+
+> The estimated slope is approximately 1.0453. This coefficient represents the average change in crime count for a one-unit increase in average temperature. In this situation, it suggests that, on average, for each unit increase in average temperature, the crime count increases by 1.0453 units.
+
+> Hypothesis Test: The null hypothesis (Ho:θ=0) assumes no linear relationship between average temperature and crime count.
+The alternative hypothesis (Ha:θ!=0) suggests a significant linear relationship. The p-value associated with the t-statistic is 0.0097, which is less than the common significance level of 0.05. Therefore, you reject the null hypothesis in favor of the alternative hypothesis.
+
+> Interpretation of Results:
+> The analysis of the data indicates a statistically significant positive relationship between average temperature and crime count in Chicago. Specifically, the positive slope coefficient of approximately 1.0453 suggests that, on average, for each one-unit increase in average temperature, there is a corresponding increase of about 1.0453 units in the crime count. This positive correlation aligns with the hypothesis that higher temperatures may be associated with increased crime rates.This relationship can be interpreted like as the the temperature rises, it potentially creates factors that lead to higher crime rates. This can be due to a variety of reason such as increased interactions, a higher temper or other factors that can be more exaggerated due to a rise in temperature. This finding also raises new questions that can be explored in future research For example, one thing our group discussed was if whether certain types of crime are more influenced by temperature than others. By exploring these questions, future research can provide explanations of the dynamics between temperature and crime. 
+
+
+> Coefficient Significance: The p-value for the slope coefficient (avg_temp) is 0.0097, indicating a statistically significant relationship. The intercept term is also statistically significant, suggesting that there is a significant intercept when average temperature is zero. However, in the context of the data, the interpretation of an intercept may not be meaningful.
+
+> Practical Considerations: While statistical significance is observed, causation cannot be inferred from correlation, and other variables like political, socioecnomic or other confounding factors may contribute to the observed relationship between temperature and crime rates in the city of chicago.
+
+
+> To improve our analysis, we could collect more specific crime data that specified the exact date for each crime instead of quarter in which the crime was committed. This could help us by having more data points available. We wonder if there is a better regression model to fit the data points that could model the correlation between temperature and crime more accurately?
